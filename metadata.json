@@ -1,0 +1,6 @@
+{
+  "name": "JARVIS - Majordome & Serveur Domicile",
+  "description": "Système de majordome IA personnel autonome sur serveur dédié à domicile : gestion des photos, emails, publications, programmation Android Studio et orchestration multi-IA avec accès mobile permanent.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
