@@ -1286,17 +1286,34 @@ let currentHomeServerConfig = {
 };
 
 // 9. Server Telemetry & Status API
-app.get(['/api/v1/server/telemetry', '/api/server/status'], (_req: Request, res: Response) => {
-  const cpuPercent = Math.floor(18 + Math.random() * 10);
-  const ramPercent = Math.floor(32 + Math.random() * 5);
-  const gpuPercent = Math.floor(14 + Math.random() * 15);
-  const tempCelsius = Math.floor(41 + Math.random() * 3);
+app.get(['/api/v1/server/telemetry', '/api/server/status'], async (_req: Request, res: Response) => {
+  let cpuPercent = Math.floor(18 + Math.random() * 10);
+  let ramPercent = Math.floor(32 + Math.random() * 5);
+  let gpuPercent = Math.floor(14 + Math.random() * 15);
+  let tempCelsius = Math.floor(41 + Math.random() * 3);
+  let realNodeName = currentHomeServerConfig.serverName;
+
+  // Query live Python daemon on port 5000 if accessible
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1200);
+    const liveRes = await fetch(`http://${currentHomeServerConfig.localIp}:5000/api/telemetry`, { signal: controller.signal });
+    clearTimeout(timer);
+    if (liveRes.ok) {
+      const liveData = await liveRes.json();
+      if (liveData?.cpu?.percent !== undefined) cpuPercent = Math.round(liveData.cpu.percent);
+      if (liveData?.ram?.percent !== undefined) ramPercent = Math.round(liveData.ram.percent);
+      if (liveData?.node) realNodeName = `${currentHomeServerConfig.serverName} (${liveData.node})`;
+    }
+  } catch (_e) {
+    // Fallback to simulated metrics if offline
+  }
 
   res.json({
-    hostname: currentHomeServerConfig.serverName,
+    hostname: realNodeName,
     ip: currentHomeServerConfig.localIp,
     vpnTunnel: `WireGuard (${currentHomeServerConfig.wireguardIp}:${currentHomeServerConfig.wireguardPort})`,
-    os: 'Debian GNU/Linux 12 (Bookworm)',
+    os: 'Debian GNU/Linux 10 (Buster)',
     uptime: '47 jours, 14 heures, 22 minutes',
     hardware: {
       cpu: currentHomeServerConfig.hardwareCpu,

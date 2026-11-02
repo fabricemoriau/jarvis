@@ -319,6 +319,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.jarvis.homeserver.network.JarvisApiManager
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -338,11 +339,89 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun JarvisDashboardScreen() {
+    var connectionStatus by remember { mutableStateOf("Vérification du réseau...") }
+    var activeEndpoint by remember { mutableStateOf("Analyse...") }
+
+    LaunchedEffect(Unit) {
+        val activeUrl = JarvisApiManager.resolveActiveServerUrl()
+        activeEndpoint = activeUrl
+        connectionStatus = if (JarvisApiManager.pingServer(activeUrl)) {
+            "Serveur JARVIS En Ligne & Synchronisé"
+        } else {
+            "Serveur injoignable - Vérifiez le tunnel WireGuard"
+        }
+    }
+
     Column(modifier = Modifier.padding(16.dp)) {
-        Text("J.A.R.V.I.S. Mobile", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF00F2FE))
+        Text("J.A.R.V.I.S. Mobile Companion", style = MaterialTheme.typography.headlineMedium, color = Color(0xFF00F2FE))
         Spacer(modifier = Modifier.height(8.dp))
-        Text("Connecté au serveur dédié (192.168.1.98)", color = Color.White)
+        Text("Statut : $connectionStatus", color = Color.White)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text("Point d'accès actif : $activeEndpoint", color = Color(0xFF00F2FE), style = MaterialTheme.typography.bodySmall)
         // Passerelle vers les commandes vocales, emails et caméra
+    }
+}`,
+  },
+  {
+    path: 'app/src/main/java/com/jarvis/homeserver/network/JarvisApiManager.kt',
+    name: 'JarvisApiManager.kt',
+    type: 'file',
+    language: 'kotlin',
+    content: `package com.jarvis.homeserver.network
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
+
+/**
+ * Gestionnaire intelligent de la connectivité Réseau JARVIS (APK <-> Serveur Dédié).
+ * Connecté en direct sur la passerelle Python (Port 5000) et Node.js (Port 3000).
+ * Bascule automatique selon la disponibilité :
+ * 1. Wi-Fi Local Domicile : http://192.168.1.98:5000 / :3000
+ * 2. Hors Wi-Fi / 4G/5G Tunnel WireGuard : http://100.84.12.9:5000 (Port UDP 51820)
+ * 3. Hors Wi-Fi / Nom de domaine DDNS HTTPS : https://fabrice-jarvis-home.duckdns.org:5000
+ */
+object JarvisApiManager {
+
+    private const val LOCAL_WIFI_URL_5000 = "http://192.168.1.98:5000"
+    private const val LOCAL_WIFI_URL_3000 = "http://192.168.1.98:3000"
+    private const val WIREGUARD_VPN_URL = "http://100.84.12.9:5000"
+    private const val DDNS_PUBLIC_URL = "https://fabrice-jarvis-home.duckdns.org:5000"
+
+    suspend fun resolveActiveServerUrl(): String = withContext(Dispatchers.IO) {
+        // Test 1: Passerelle Python principale sur le réseau Wi-Fi local (Port 5000)
+        if (pingServer("$LOCAL_WIFI_URL_5000/api/health") || pingServer("$LOCAL_WIFI_URL_5000/api/telemetry")) {
+            return@withContext LOCAL_WIFI_URL_5000
+        }
+
+        // Test 2: Dashboard Express/Node sur le réseau local (Port 3000)
+        if (pingServer("$LOCAL_WIFI_URL_3000/api/v1/server/telemetry")) {
+            return@withContext LOCAL_WIFI_URL_3000
+        }
+
+        // Test 3: Tunnel VPN WireGuard sécurisé en 4G/5G (Port 5000)
+        if (pingServer("$WIREGUARD_VPN_URL/api/health")) {
+            return@withContext WIREGUARD_VPN_URL
+        }
+
+        // Test 4: Domaine public DDNS chiffré DuckDNS
+        return@withContext DDNS_PUBLIC_URL
+    }
+
+    suspend fun pingServer(endpointUrl: String): Boolean = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val connection = (URL(endpointUrl).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 2000
+                readTimeout = 2000
+                requestMethod = "GET"
+            }
+            val responseCode = connection.responseCode
+            connection.disconnect()
+            responseCode in 200..299
+        } catch (e: Exception) {
+            false
+        }
     }
 }`,
   },
