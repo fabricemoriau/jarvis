@@ -71,7 +71,7 @@ export const AndroidModule: React.FC<AndroidModuleProps> = ({
 
   // GitHub Sync State & Modal
   const [isGitModalOpen, setIsGitModalOpen] = useState(false);
-  const [gitRepo, setGitRepo] = useState('https://github.com/fabrice-moriau/jarvis-homeserver-android.git');
+  const [gitRepo, setGitRepo] = useState('https://github.com/fabricemoriau/jarvis.git');
   const [gitBranch, setGitBranch] = useState('main');
   const [githubToken, setGithubToken] = useState('');
   const [commitMessage, setCommitMessage] = useState('feat(ai-studio): compilation et mise à jour des composants Android');
