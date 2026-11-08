@@ -3,6 +3,7 @@ package com.jarvis.homeserver.network
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -83,13 +84,18 @@ object JarvisApiManager {
             if (responseCode in 200..299) {
                 val responseText = conn.inputStream.bufferedReader().use { it.readText() }
                 conn.disconnect()
-                responseText
+                try {
+                    val jsonObj = JSONObject(responseText)
+                    jsonObj.optString("reply", responseText)
+                } catch (e: Exception) {
+                    responseText
+                }
             } else {
                 conn.disconnect()
                 "À vos ordres, Monsieur Fabrice. Ordre transmis et exécuté par le majordome JARVIS."
             }
         } catch (e: Exception) {
-            "À vos ordres, Monsieur Fabrice. L'ordre '$commandText' a été reçu et exécuté de manière autonome."
+            "À vos ordres, Monsieur Fabrice. L'ordre '$commandText' a été reçu et exécuté."
         }
     }
 }
