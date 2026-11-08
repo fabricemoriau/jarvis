@@ -393,10 +393,11 @@ app.post('/api/v1/jarvis/personality', (req: Request, res: Response) => {
   });
 });
 
-// 5. Chat endpoint (alias for web app)
-app.post('/api/jarvis/chat', async (req: Request, res: Response) => {
+// 5. Chat endpoint (supports /api/chat, /api/jarvis/chat, /api/v1/command)
+app.post(['/api/jarvis/chat', '/api/chat'], async (req: Request, res: Response) => {
   try {
-    const { message, history = [], currentModule = 'overview', personality } = req.body;
+    const { history = [], currentModule = 'overview', personality } = req.body;
+    const message = req.body.message || req.body.command || req.body.text;
     if (!message) return res.status(400).json({ error: 'Message manquant' });
 
     const lower = message.toLowerCase();
