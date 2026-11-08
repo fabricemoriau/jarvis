@@ -29,7 +29,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jarvis.homeserver.network.JarvisApiManager
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -55,10 +54,11 @@ fun JarvisHudDashboard() {
     var activeEndpoint by remember { mutableStateOf("Analyse des nœuds...") }
     var isConnected by remember { mutableStateOf(false) }
     var isThinking by remember { mutableStateOf(false) }
+    var inputText by remember { mutableStateOf("") }
     
     val logs = remember { mutableStateListOf(
-        "[SYSTEME] Boot JARVIS Mobile Companion v2.5",
-        "[RESEAU] Recherche des nœuds Tailscale & Wi-Fi...",
+        "[SYSTEME] Boot JARVIS Mobile Companion v2.6",
+        "[POUVOIRS] Contrôle total et exécution autonome activés.",
         "[SERVEUR] Démon Python 100.67.0.126 & 192.168.1.98 prêts."
     ) }
 
@@ -77,6 +77,18 @@ fun JarvisHudDashboard() {
             } else {
                 connectionStatus = "Alerte : Injoignable (Vérifiez VPN/Wi-Fi)"
                 logs.add(0, "[ERREUR] Impossible de contacter $activeUrl")
+            }
+        }
+    }
+
+    fun executeOrder(cmd: String) {
+        if (cmd.isNotBlank()) {
+            coroutineScope.launch {
+                logs.add(0, "[FABRICE] $cmd")
+                isThinking = true
+                val reply = JarvisApiManager.sendCommand(cmd)
+                isThinking = false
+                logs.add(0, "[JARVIS] $reply")
             }
         }
     }
@@ -137,7 +149,7 @@ fun JarvisHudDashboard() {
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // --- 2. ARC REACTOR CORE ANIMATION ---
         ArcReactorWidget(
@@ -145,7 +157,7 @@ fun JarvisHudDashboard() {
             onClick = { refreshNetworkStatus() }
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // --- 3. TELEMETRY NETWORK CARD ---
         Card(
@@ -155,7 +167,7 @@ fun JarvisHudDashboard() {
             colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A).copy(alpha = 0.8f)),
             shape = RoundedCornerShape(16.dp)
         ) {
-            Column(modifier = Modifier.padding(14.dp)) {
+            Column(modifier = Modifier.padding(12.dp)) {
                 Text(
                     text = "LIAISON SERVEUR DOMESTIQUE",
                     color = Color(0xFF00F2FE),
@@ -163,41 +175,70 @@ fun JarvisHudDashboard() {
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "Statut : ", color = Color(0xFF94A3B8), fontSize = 12.sp)
-                    Text(text = connectionStatus, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "Point d'accès : ", color = Color(0xFF94A3B8), fontSize = 12.sp)
-                    Text(text = activeEndpoint, color = Color(0xFF38BDF8), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                    Text(text = "Statut : ", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                    Text(text = connectionStatus, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "Point d'accès : ", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                    Text(text = activeEndpoint, color = Color(0xFF38BDF8), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        // --- 4. QUICK ACTIONS HUD GRID ---
-        Text(
-            text = "COMMANDES RAPIDES MAJORDOME",
-            color = Color(0xFF94A3B8),
-            fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace,
-            modifier = Modifier.align(Alignment.Start)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
+        // --- 4. COMMAND OMNIBAR INPUT ---
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                value = inputText,
+                onValueChange = { inputText = it },
+                placeholder = { Text("Tapez n'importe quel ordre pour JARVIS...", color = Color(0xFF64748B), fontSize = 11.sp) },
+                modifier = Modifier.weight(1f),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF00F2FE),
+                    unfocusedBorderColor = Color(0xFF1E293B),
+                    focusedContainerColor = Color(0xFF0F172A),
+                    unfocusedContainerColor = Color(0xFF0B132B),
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
 
+            Button(
+                onClick = {
+                    val cmd = inputText.trim()
+                    inputText = ""
+                    executeOrder(cmd)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00F2FE)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("EXÉCUTER", color = Color(0xFF030712), fontWeight = FontWeight.Bold, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // --- 5. QUICK ACTIONS HUD GRID ---
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             QuickActionButton(
-                label = "📧 Emails",
+                label = "📧 Mails",
                 desc = "Urgent Triage",
                 modifier = Modifier.weight(1f)
             ) {
-                logs.add(0, "[ORDRE] Analyse et triage des emails en cours...")
+                executeOrder("Jarvis, fais le triage de mes mails urgents.")
             }
 
             QuickActionButton(
@@ -205,7 +246,7 @@ fun JarvisHudDashboard() {
                 desc = "Photos Xiaomi",
                 modifier = Modifier.weight(1f)
             ) {
-                logs.add(0, "[ORDRE] Transmission des nouvelles photos vers /nas/photos/...")
+                executeOrder("Jarvis, synchronise mes photos sur le serveur.")
             }
 
             QuickActionButton(
@@ -217,9 +258,9 @@ fun JarvisHudDashboard() {
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        // --- 5. TERMINAL LOG CONSOLE ---
+        // --- 6. TERMINAL LOG CONSOLE ---
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -228,14 +269,14 @@ fun JarvisHudDashboard() {
             colors = CardDefaults.cardColors(containerColor = Color(0xFF020617)),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
+            Column(modifier = Modifier.padding(10.dp)) {
                 Text(
-                    text = "CONSOLE CONSOLE TÉLÉMÉTRIE",
+                    text = "CONSOLE D'EXÉCUTION AUTONOME",
                     color = Color(0xFF64748B),
                     fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(logs) { log ->
                         Text(
@@ -243,7 +284,8 @@ fun JarvisHudDashboard() {
                             color = when {
                                 log.startsWith("[OK]") -> Color(0xFF4ADE80)
                                 log.startsWith("[ERREUR]") -> Color(0xFFF87171)
-                                log.startsWith("[ORDRE]") -> Color(0xFFFACC15)
+                                log.startsWith("[FABRICE]") -> Color(0xFFFACC15)
+                                log.startsWith("[JARVIS]") -> Color(0xFF00F2FE)
                                 else -> Color(0xFF38BDF8)
                             },
                             fontSize = 11.sp,
@@ -286,26 +328,24 @@ fun ArcReactorWidget(
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(140.dp)
+            .size(120.dp)
             .scale(if (isThinking) scalePulse * 1.1f else scalePulse)
             .clickable { onClick() }
     ) {
-        Canvas(modifier = Modifier.size(130.dp).rotate(rotation)) {
+        Canvas(modifier = Modifier.size(110.dp).rotate(rotation)) {
             val center = Offset(size.width / 2, size.height / 2)
             val radius = size.minDimension / 2
 
-            // Outer Glowing Ring
             drawCircle(
-                color = Color(0xFF00F2FE).copy(alpha = 0.2f),
+                color = Color(0xFF00F2FE).copy(alpha = 0.25f),
                 radius = radius,
                 style = Stroke(width = 8f)
             )
 
-            // Dashed Ring Segments
             for (i in 0 until 12) {
                 val angle = (i * 30) * (Math.PI / 180)
-                val startX = center.x + (radius - 16) * Math.cos(angle).toFloat()
-                val startY = center.y + (radius - 16) * Math.sin(angle).toFloat()
+                val startX = center.x + (radius - 14) * Math.cos(angle).toFloat()
+                val startY = center.y + (radius - 14) * Math.sin(angle).toFloat()
                 val endX = center.x + radius * Math.cos(angle).toFloat()
                 val endY = center.y + radius * Math.sin(angle).toFloat()
                 drawLine(
@@ -317,10 +357,9 @@ fun ArcReactorWidget(
             }
         }
 
-        // Inner Arc Core
         Box(
             modifier = Modifier
-                .size(60.dp)
+                .size(52.dp)
                 .clip(CircleShape)
                 .background(
                     Brush.radialGradient(
@@ -331,9 +370,9 @@ fun ArcReactorWidget(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = if (isThinking) "SCAN" else "JARVIS",
+                text = if (isThinking) "EXEC" else "JARVIS",
                 color = Color(0xFF030712),
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace
             )
@@ -354,10 +393,10 @@ fun QuickActionButton(
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(
-            modifier = Modifier.padding(10.dp),
+            modifier = Modifier.padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(text = label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(text = label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(2.dp))
             Text(text = desc, color = Color(0xFF64748B), fontSize = 9.sp, fontFamily = FontFamily.Monospace)
         }
