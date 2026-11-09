@@ -23,12 +23,14 @@ import {
 import { NavigationTab, ChatMessage, ServerTelemetry, EmailItem, PhotoItem, AndroidFile, PublicationItem } from './types';
 import { askJarvisChat, fetchServerStatus } from './services/api';
 import { jarvisVoice } from './services/voice';
+import { addOfflineQueuedCommand, flushOfflineQueue, getOfflineQueue } from './services/offlineQueue';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavigationTab>('overview');
   const [telemetry, setTelemetry] = useState<ServerTelemetry | null>(null);
   const inFlightRequestRef = useRef(false);
+  const [offlineQueueCount, setOfflineQueueCount] = useState(getOfflineQueue().length);
 
   const [emails, setEmails] = useState<EmailItem[]>(INITIAL_EMAILS);
   const [photos, setPhotos] = useState<PhotoItem[]>(INITIAL_PHOTOS);
@@ -89,6 +91,44 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const syncQueue = async () => {
+      if (!navigator.onLine) {
+        setOfflineQueueCount(getOfflineQueue().length);
+        return;
+      }
+
+      const flushed = await flushOfflineQueue(async (text) => {
+        await askJarvisChat(text, messages, activeTab);
+      });
+
+      if (flushed > 0) {
+        showNotification(`${flushed} commande(s) hors ligne exécutée(s) automatiquement.`, 'success');
+      }
+
+      setOfflineQueueCount(getOfflineQueue().length);
+    };
+
+    const onOnline = () => {
+      void syncQueue();
+      showNotification('Connexion restaurée. JARVIS relance les commandes en attente.', 'success');
+    };
+
+    const onOffline = () => {
+      showNotification('Connexion perdue. JARVIS garde les commandes en file d’attente.', 'info');
+      setOfflineQueueCount(getOfflineQueue().length);
+    };
+
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    void syncQueue();
+
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, [activeTab, messages]);
+
   const showNotification = (msg: string, type: 'info' | 'success' = 'success') => {
     setToast({ msg, type });
     setTimeout(() => {
@@ -101,7 +141,7 @@ export default function App() {
     setIsMuted(newMuted);
     jarvisVoice.setMuted(newMuted);
     showNotification(
-      newMuted ? "Voix de JARVIS désactivée." : "Voix de JARVIS activée en français.",
+      newMuted ? 'Voix de JARVIS désactivée.' : 'Voix de JARVIS activée en français.',
       'info'
     );
   };
@@ -109,6 +149,13 @@ export default function App() {
   const handleProcessOrder = async (orderText: string) => {
     const trimmed = orderText.trim();
     if (!trimmed || inFlightRequestRef.current || isThinking) return;
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      addOfflineQueuedCommand(trimmed);
+      setOfflineQueueCount(getOfflineQueue().length);
+      showNotification('Hors ligne : la commande a été enregistrée et sera relancée automatiquement.', 'info');
+      return;
+    }
 
     inFlightRequestRef.current = true;
     setIsThinking(true);
@@ -124,7 +171,7 @@ export default function App() {
 
     try {
       const response = await askJarvisChat(trimmed, messages, activeTab);
-      const replyText = response.reply || "À vos ordres, Monsieur. Votre demande a été traitée.";
+      const replyText = response.reply || 'À vos ordres, Monsieur. Votre demande a été traitée.';
 
       const jarvisMsg: ChatMessage = {
         id: `jarvis-${Date.now()}`,
@@ -168,13 +215,14 @@ export default function App() {
       const errorMsg: ChatMessage = {
         id: `err-${Date.now()}`,
         sender: 'jarvis',
-        text: `À vos ordres, Monsieur. Une légère perturbation réseau s'est produite, mais le serveur local a pris le relais.`,
+        text: "À vos ordres, Monsieur. Une légère perturbation réseau s'est produite, mais le serveur local a pris le relais.",
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
       inFlightRequestRef.current = false;
       setIsThinking(false);
+      setOfflineQueueCount(getOfflineQueue().length);
     }
   };
 
@@ -194,7 +242,7 @@ export default function App() {
       (err) => {
         console.warn('Voice recognition error:', err);
         setIsListening(false);
-        showNotification("Microphone indisponible ou permission non accordée.", 'info');
+        showNotification('Microphone indisponible ou permission non accordée.', 'info');
       }
     );
   };
@@ -234,6 +282,13 @@ export default function App() {
           setIsListening={setIsListening}
           currentModule={activeTab}
         />
+
+        {offlineQueueCount > 0 && (
+          <div className="flex items-center justify-between rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            <span>File hors ligne : {offlineQueueCount} commande(s) en attente.</span>
+            <span className="font-semibold">JARVIS relancera automatiquement dès que la connexion revient.</span>
+          </div>
+        )}
 
         {activeTab === 'overview' && (
           <OverviewModule
