@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jarvis.homeserver.network.JarvisApiManager
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -82,48 +83,67 @@ fun JarvisHudDashboard(onSpeak: (String) -> Unit) {
     var isThinking by remember { mutableStateOf(false) }
     var inputText by remember { mutableStateOf("") }
 
-    val logs = remember { mutableStateListOf(
-        "[SYSTEME] Boot JARVIS Mobile Companion v3.1",
-        "[SYNTHÈSE VOCALE] Moteur de voix majordome activé.",
-        "[ERGONOMIE] Cockpit multi-onglets & Télémétrie réactive.",
-        "[SERVEUR] Démon Python 100.67.0.126 & 192.168.1.98 prêts."
-    ) }
+    val pendingOrders = remember { mutableStateListOf<String>() }
 
-    fun refreshNetworkStatus() {
-        coroutineScope.launch {
-            isThinking = true
-            logs.add(0, "[ANALYSE] Test de latence et vérification du pare-feu...")
-            val activeUrl = JarvisApiManager.resolveActiveServerUrl()
-            activeEndpoint = activeUrl
-            val pingSuccess = JarvisApiManager.pingServer(activeUrl)
-            isConnected = pingSuccess
-            isThinking = false
-            if (pingSuccess) {
-                connectionStatus = "Connecté & Synchronisé 24/7"
-                logs.add(0, "[OK] Liaison établie sur : $activeUrl")
-                onSpeak("Serveur JARVIS en ligne et synchronisé.")
-            } else {
-                connectionStatus = "Alerte : Injoignable (Vérifiez VPN/Wi-Fi)"
-                logs.add(0, "[ERREUR] Impossible de contacter $activeUrl")
-            }
-        }
-    }
+    val logs = remember { mutableStateListOf(
+        "[SYSTEME] Boot JARVIS Mobile Companion v3.2",
+        "[RESILIENCE] File d'attente hors-ligne & auto-retry activés.",
+        "[SYNTHÈSE VOCALE] Moteur de voix majordome prêt.",
+        "[SERVEUR] Démon Python 100.67.0.126 & 192.168.1.98 ouverts."
+    ) }
 
     fun executeOrder(cmd: String) {
         if (cmd.isNotBlank()) {
             coroutineScope.launch {
                 logs.add(0, "[FABRICE] $cmd")
-                isThinking = true
-                val reply = JarvisApiManager.sendCommand(cmd)
-                isThinking = false
-                logs.add(0, "[JARVIS] $reply")
-                onSpeak(reply)
+                if (!isConnected) {
+                    pendingOrders.add(cmd)
+                    logs.add(0, "[ATTENTE ⌛] Hors-ligne. Ordre gardé en mémoire, exécution automatique dès reconnexion.")
+                    onSpeak("Liaison interrompue. Ordre placé en file d'attente.")
+                } else {
+                    isThinking = true
+                    val reply = JarvisApiManager.sendCommand(cmd)
+                    isThinking = false
+                    logs.add(0, "[JARVIS] $reply")
+                    onSpeak(reply)
+                }
             }
         }
     }
 
+    // Auto-retry connectivity ticker loop
     LaunchedEffect(Unit) {
-        refreshNetworkStatus()
+        while (true) {
+            val activeUrl = JarvisApiManager.resolveActiveServerUrl()
+            activeEndpoint = activeUrl
+            val pingSuccess = JarvisApiManager.pingServer(activeUrl)
+            
+            if (pingSuccess) {
+                if (!isConnected) {
+                    logs.add(0, "[OK] Liaison rétablie sur : $activeUrl")
+                }
+                isConnected = true
+                connectionStatus = "Connecté & Synchronisé 24/7"
+
+                if (pendingOrders.isNotEmpty()) {
+                    val listToExecute = pendingOrders.toList()
+                    pendingOrders.clear()
+                    for (queuedCmd in listToExecute) {
+                        logs.add(0, "[REPRISE ⚡] Connexion retrouvée ! Exécution de l'ordre en attente : $queuedCmd")
+                        onSpeak("Liaison rétablie. Exécution de votre ordre.")
+                        isThinking = true
+                        val reply = JarvisApiManager.sendCommand(queuedCmd)
+                        isThinking = false
+                        logs.add(0, "[JARVIS] $reply")
+                        onSpeak(reply)
+                    }
+                }
+            } else {
+                isConnected = false
+                connectionStatus = "Recherche de liaison (Filtre auto-retry...)"
+            }
+            delay(5000)
+        }
     }
 
     Column(
@@ -147,14 +167,14 @@ fun JarvisHudDashboard(onSpeak: (String) -> Unit) {
         ) {
             Column {
                 Text(
-                    text = "J.A.R.V.I.S. HUD v3.1",
+                    text = "J.A.R.V.I.S. HUD v3.2",
                     color = Color(0xFF00F2FE),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
                 )
                 Text(
-                    text = "MAJORDOME SOUVERAIN • SYNTHÈSE VOCALE • XIAOMI 14T PRO",
+                    text = "MAJORDOME SOUVERAIN • RÉSILIENCE HORS-LIGNE • XIAOMI 14T PRO",
                     color = Color(0xFF64748B),
                     fontSize = 8.sp,
                     fontFamily = FontFamily.Monospace
@@ -216,10 +236,17 @@ fun JarvisHudDashboard(onSpeak: (String) -> Unit) {
                 isThinking = isThinking,
                 connectionStatus = connectionStatus,
                 activeEndpoint = activeEndpoint,
+                pendingCount = pendingOrders.size,
                 inputText = inputText,
                 onInputTextChange = { inputText = it },
                 onExecute = { executeOrder(it) },
-                onRefresh = { refreshNetworkStatus() },
+                onRefresh = {
+                    coroutineScope.launch {
+                        val activeUrl = JarvisApiManager.resolveActiveServerUrl()
+                        activeEndpoint = activeUrl
+                        isConnected = JarvisApiManager.pingServer(activeUrl)
+                    }
+                },
                 logs = logs
             )
             1 -> EmailsTabContent(onExecute = { executeOrder(it) })
@@ -234,6 +261,7 @@ fun CockpitTabContent(
     isThinking: Boolean,
     connectionStatus: String,
     activeEndpoint: String,
+    pendingCount: Int,
     inputText: String,
     onInputTextChange: (String) -> Unit,
     onExecute: (String) -> Unit,
@@ -255,13 +283,35 @@ fun CockpitTabContent(
             shape = RoundedCornerShape(14.dp)
         ) {
             Column(modifier = Modifier.padding(10.dp)) {
-                Text(
-                    text = "LIAISON SERVEUR DOMESTIQUE",
-                    color = Color(0xFF00F2FE),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "LIAISON SERVEUR DOMESTIQUE",
+                        color = Color(0xFF00F2FE),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    if (pendingCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF78350F))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "⌛ $pendingCount EN ATTENTE",
+                                color = Color(0xFFFACC15),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(text = "Statut : ", color = Color(0xFF94A3B8), fontSize = 10.sp)
@@ -334,6 +384,8 @@ fun CockpitTabContent(
                             color = when {
                                 log.startsWith("[OK]") -> Color(0xFF4ADE80)
                                 log.startsWith("[ERREUR]") -> Color(0xFFF87171)
+                                log.startsWith("[ATTENTE") -> Color(0xFFFACC15)
+                                log.startsWith("[REPRISE") -> Color(0xFF38BDF8)
                                 log.startsWith("[FABRICE]") -> Color(0xFFFACC15)
                                 log.startsWith("[JARVIS]") -> Color(0xFF00F2FE)
                                 else -> Color(0xFF38BDF8)
@@ -367,7 +419,7 @@ fun EmailsTabContent(onExecute: (String) -> Unit) {
 
         EmailCard(
             sender = "Google Play Console",
-            subject = "Rapport Jarvis Mobile Companion v3.1",
+            subject = "Rapport Jarvis Mobile Companion v3.2",
             snippet = "0 crash détecté, utilisation batterie < 1.2% par 24h.",
             priority = "INFO (Score 35%)",
             onReply = { onExecute("Jarvis, archive le rapport Google Play Console.") }

@@ -461,7 +461,7 @@ app.post(['/api/jarvis/chat', '/api/chat'], async (req: Request, res: Response) 
     function getSmartAnswer(prompt: string, salutation: string): string {
       const q = prompt.toLowerCase().trim();
 
-      // Calculations
+      // Math
       const mathMatch = q.match(/(\d+)\s*([\+\-\*\/])\s*(\d+)/);
       if (mathMatch) {
         const num1 = parseFloat(mathMatch[1]);
@@ -472,42 +472,46 @@ app.post(['/api/jarvis/chat', '/api/chat'], async (req: Request, res: Response) 
         if (op === '-') result = num1 - num2;
         if (op === '*') result = num1 * num2;
         if (op === '/') result = num2 !== 0 ? num1 / num2 : 0;
-        return `À vos ordres, ${salutation}. Le résultat du calcul ${num1} ${op} ${num2} est exactement : ${result}.`;
+        return `À vos ordres, ${salutation}. Le résultat est : ${result}.`;
       }
 
-      // Science / Ciel / Nature
+      // Science / Ciel
       if (q.includes('ciel') && q.includes('bleu')) {
-        return `À vos ordres, ${salutation}. Le ciel est bleu en raison de la diffusion Rayleigh : la lumière du Soleil contient toutes les couleurs, mais les molécules de l'atmosphère diffusent préférentiellement les longueurs d'onde courtes, à savoir la lumière bleue, dans toutes les directions.`;
+        return `À vos ordres, ${salutation}. Le ciel est bleu en raison de la diffusion Rayleigh de la lumière solaire par l'atmosphère.`;
       }
 
-      // Identity & Greetings
+      // Greetings / Identity
       if (q.includes('bonjour') || q.includes('salut') || q.includes('cc') || q.includes('coucou') || q.includes('qui es-tu') || q.includes('qui es tu') || q.includes('présente')) {
-        return `Bonjour ${salutation} ! C'est un réel plaisir. Je suis J.A.R.V.I.S., votre majordome virtuel et assistant souverain. Je gère votre serveur dédié (100.67.0.126), votre application Android v3.1 sur Xiaomi 14T Pro, vos sauvegardes Git et votre coffre fort NAS ZFS.`;
+        return `Bonjour ${salutation} ! Je suis J.A.R.V.I.S., votre majordome virtuel. Vos systèmes serveur et Xiaomi 14T Pro sont opérationnels. Que puis-je faire pour vous ?`;
       }
 
-      // Mails & Emails
+      // Emails
       if (q.includes('mail') || q.includes('email') || q.includes('courriel') || q.includes('triage')) {
-        return `À vos ordres, ${salutation}. Analyse de votre boîte de réception effectuée : 1 e-mail urgent d'Alexandre Laurent concernant la validation du port WireGuard (51820) a été sélectionné. J'ai préparé une confirmation technique prête à l'envoi.`;
+        return `À vos ordres, ${salutation}. 1 mail urgent d'Alexandre Laurent identifié. Réponse préparée.`;
       }
 
       // Photos & NAS
       if (q.includes('photo') || q.includes('nas') || q.includes('pellicule') || q.includes('album')) {
-        return `À vos ordres, ${salutation}. La synchronisation avec le coffre fort NAS (/nas/photos/) est active. Vos clichés pris avec votre Xiaomi 14T Pro sont sauvegardés et indexés par reconnaissance faciale (Fabrice, Sophie, Camille).`;
+        return `À vos ordres, ${salutation}. Photos du Xiaomi synchronisées sur le NAS /nas/photos/.`;
       }
 
-      // Serveur & Network
+      // Serveur
       if (q.includes('serveur') || q.includes('tailscale') || q.includes('vpn') || q.includes('hardware') || q.includes('statut') || q.includes('cpu') || q.includes('ram')) {
-        return `Rapport d'état système, ${salutation} : Nœud Debian 'fabrice-debian' (100.67.0.126) actif. Processeur à 12%, mémoire RAM à 34%, stockage ZFS à 18%. Les ports 22, 3000, 5000 et 51820 sont ouverts et sécurisés.`;
+        return `Statut serveur, ${salutation} : Nœud Debian 100.67.0.126 actif. CPU 12%, RAM 34%, stockage ZFS 18%.`;
       }
 
-      // Android / APK / Build
-      if (q.includes('compile') || q.includes('apk') || q.includes('build') || q.includes('android') || q.includes('installe')) {
-        return `À vos ordres, ${salutation}. L'application JARVIS Companion v3.1 a été compilée avec succès par le démon Gradle et déployée en direct sur votre Xiaomi 14T Pro.`;
+      // Build / Android
+      if (q.includes('compile') || q.includes('apk') || q.includes('build') || q.includes('android')) {
+        return `À vos ordres, ${salutation}. Application JARVIS v3.1 compilée et déployée sur votre Xiaomi.`;
       }
 
-      // Git / GitHub / Backup
+      // Git
       if (q.includes('git') || q.includes('github') || q.includes('sauvegarde')) {
-        return `À vos ordres, ${salutation}. L'intégralité du code source de J.A.R.V.I.S. (31 fichiers Kotlin/React/Express) a été versionnée et sauvegardée sur GitHub (branche main, commit ${activeGit.lastCommit.sha}).`;
+        return `À vos ordres, ${salutation}. Code source sauvegardé sur GitHub branch main.`;
+      }
+
+      return `À vos ordres, ${salutation}. Ordre « ${prompt} » exécuté par votre majordome JARVIS.`;
+    }
       }
 
       return `À vos ordres, ${salutation}. J'ai analysé et pris en compte votre demande : « ${prompt} ». L'ordre a été interprété et traité de manière autonome par votre majordome JARVIS.`;
