@@ -346,11 +346,29 @@ fun CockpitTabContent(
                     unfocusedTextColor = Color.White
                 ),
                 shape = RoundedCornerShape(10.dp),
-                singleLine = true
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Send
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onSend = {
+                        val cmd = inputText.trim()
+                        if (cmd.isNotBlank()) {
+                            onExecute(cmd)
+                            onInputTextChange("")
+                        }
+                    }
+                )
             )
 
             Button(
-                onClick = { onExecute(inputText.trim()) },
+                onClick = {
+                    val cmd = inputText.trim()
+                    if (cmd.isNotBlank()) {
+                        onExecute(cmd)
+                        onInputTextChange("")
+                    }
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00F2FE)),
                 shape = RoundedCornerShape(10.dp)
             ) {

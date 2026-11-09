@@ -23,15 +23,16 @@ object JarvisApiManager {
     suspend fun resolveActiveServerUrl(): String = withContext(Dispatchers.IO) {
         cachedActiveUrl?.let { url ->
             if (pingServer("$url/api/server/status") || pingServer("$url/api/health")) {
+                Log.i("JarvisApiManager", "Using cached active endpoint: $url")
                 return@withContext url
             }
         }
 
         val candidates = listOf(
             ADB_USB_REVERSE_3000 to "$ADB_USB_REVERSE_3000/api/server/status",
+            PC_LOCAL_WIFI_3000 to "$PC_LOCAL_WIFI_3000/api/server/status",
             ADB_USB_REVERSE_5000 to "$ADB_USB_REVERSE_5000/api/health",
             TAILSCALE_URL_5000 to "$TAILSCALE_URL_5000/api/health",
-            PC_LOCAL_WIFI_3000 to "$PC_LOCAL_WIFI_3000/api/server/status",
             LOCAL_WIFI_URL_5000 to "$LOCAL_WIFI_URL_5000/api/health"
         )
 
@@ -42,23 +43,25 @@ object JarvisApiManager {
         }
 
         val results = pingJobs.awaitAll()
-        val winner = results.firstOrNull { it != null } ?: DDNS_PUBLIC_URL
+        val winner = results.firstOrNull { it != null } ?: ADB_USB_REVERSE_3000
         cachedActiveUrl = winner
+        Log.i("JarvisApiManager", "Resolved winner active endpoint: $winner")
         winner
     }
 
     suspend fun pingServer(endpointUrl: String): Boolean = withContext(Dispatchers.IO) {
         return@withContext try {
             val connection = (URL(endpointUrl).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 800
-                readTimeout = 800
+                connectTimeout = 3000
+                readTimeout = 3000
                 requestMethod = "GET"
             }
             val responseCode = connection.responseCode
             connection.disconnect()
-            Log.d("JarvisApiManager", "Ping $endpointUrl -> $responseCode")
+            Log.i("JarvisApiManager", "Ping $endpointUrl -> SUCCESS $responseCode")
             responseCode in 200..299
         } catch (e: Exception) {
+            Log.i("JarvisApiManager", "Ping $endpointUrl -> FAILED (${e.message})")
             false
         }
     }
@@ -66,11 +69,12 @@ object JarvisApiManager {
     suspend fun sendCommand(commandText: String): String = withContext(Dispatchers.IO) {
         val baseUrl = resolveActiveServerUrl()
         val targetEndpoint = "$baseUrl/api/chat"
+        Log.i("JarvisApiManager", "Sending command '$commandText' to target $targetEndpoint")
         return@withContext try {
             val url = URL(targetEndpoint)
             val conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 4000
-                readTimeout = 4000
+                connectTimeout = 5000
+                readTimeout = 5000
                 requestMethod = "POST"
                 setRequestProperty("Content-Type", "application/json")
                 doOutput = true
@@ -82,9 +86,11 @@ object JarvisApiManager {
             }
 
             val responseCode = conn.responseCode
+            Log.i("JarvisApiManager", "Command HTTP Response Code: $responseCode")
             if (responseCode in 200..299) {
                 val responseText = conn.inputStream.bufferedReader().use { it.readText() }
                 conn.disconnect()
+                Log.i("JarvisApiManager", "Raw Response Text: $responseText")
                 try {
                     val jsonObj = JSONObject(responseText)
                     jsonObj.optString("reply", responseText)
@@ -96,6 +102,7 @@ object JarvisApiManager {
                 "À vos ordres, Monsieur Fabrice. Ordre transmis et exécuté par le majordome JARVIS."
             }
         } catch (e: Exception) {
+            Log.e("JarvisApiManager", "Command execution failed: ${e.message}", e)
             "À vos ordres, Monsieur Fabrice. L'ordre '$commandText' a été reçu et exécuté."
         }
     }
