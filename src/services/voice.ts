@@ -16,6 +16,7 @@ class JarvisVoiceService {
   private voice: SpeechSynthesisVoice | null = null;
   private isMuted: boolean = false;
   private recognition: any = null;
+  private isListening: boolean = false;
   private settings: VoiceSettings = {
     preset: 'jarvis_classic',
     pitch: 0.95,
@@ -30,7 +31,9 @@ class JarvisVoiceService {
       if (saved) {
         try {
           this.settings = { ...this.settings, ...JSON.parse(saved) };
-        } catch (e) {}
+        } catch (e) {
+          // ignore invalid persisted settings
+        }
       }
 
       if ('speechSynthesis' in window) {
@@ -70,9 +73,7 @@ class JarvisVoiceService {
       }
     }
 
-    // Select according to preset
     if (this.settings.preset === 'friday' || this.settings.preset === 'karen') {
-      // Prefer female French voices
       const female = frVoices.find(
         (v) =>
           v.name.toLowerCase().includes('julie') ||
@@ -83,7 +84,6 @@ class JarvisVoiceService {
       );
       this.voice = female || frVoices[0] || voices[0] || null;
     } else {
-      // Prefer deep calm male French voice for classic Jarvis
       const male = frVoices.find(
         (v) =>
           v.name.toLowerCase().includes('thomas') ||
@@ -114,19 +114,17 @@ class JarvisVoiceService {
     }
 
     try {
-      this.synth.cancel(); // Stop any pending speech
-      // Clean markdown stars/hashtags for cleaner speech
+      this.synth.cancel();
       const cleanText = text
         .replace(/[*#_`>]/g, '')
         .replace(/https?:\/\/\S+/g, '')
-        .slice(0, 350); // Speak first 350 characters for conciseness
+        .slice(0, 350);
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
       if (this.voice) {
         utterance.voice = this.voice;
       }
 
-      // Apply dynamic rates and pitch
       let dynamicPitch = this.settings.pitch;
       let dynamicRate = this.settings.rate;
 
@@ -184,26 +182,38 @@ class JarvisVoiceService {
       return;
     }
 
+    if (this.isListening) {
+      return;
+    }
+
     try {
+      this.isListening = true;
       this.recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        if (transcript) {
-          onResult(transcript);
+        const transcript = event?.results?.[0]?.[0]?.transcript;
+        if (transcript && transcript.trim()) {
+          onResult(transcript.trim());
         }
       };
 
       this.recognition.onerror = (event: any) => {
+        this.isListening = false;
         if (onError) onError(event);
+      };
+
+      this.recognition.onend = () => {
+        this.isListening = false;
       };
 
       this.recognition.start();
     } catch (e) {
+      this.isListening = false;
       if (onError) onError(e);
     }
   }
 
   public stopListening() {
     if (this.recognition) {
+      this.isListening = false;
       try {
         this.recognition.stop();
       } catch (e) {

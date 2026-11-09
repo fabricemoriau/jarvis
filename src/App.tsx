@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HeaderHUD } from './components/HeaderHUD';
 import { CommandOmnibar } from './components/CommandOmnibar';
 import { OverviewModule } from './components/modules/OverviewModule';
@@ -28,14 +28,13 @@ import { CheckCircle2, AlertCircle } from 'lucide-react';
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavigationTab>('overview');
   const [telemetry, setTelemetry] = useState<ServerTelemetry | null>(null);
+  const inFlightRequestRef = useRef(false);
 
-  // App domain states
   const [emails, setEmails] = useState<EmailItem[]>(INITIAL_EMAILS);
   const [photos, setPhotos] = useState<PhotoItem[]>(INITIAL_PHOTOS);
   const [androidFiles, setAndroidFiles] = useState<AndroidFile[]>(INITIAL_ANDROID_FILES);
   const [publications, setPublications] = useState<PublicationItem[]>(INITIAL_PUBLICATIONS);
 
-  // AI & Voice Assistant states
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
@@ -44,22 +43,18 @@ export default function App() {
   const [isServerSetupOpen, setIsServerSetupOpen] = useState(false);
   const [isVoicePersonalityOpen, setIsVoicePersonalityOpen] = useState(false);
 
-  // Notifications banner
   const [toast, setToast] = useState<{ msg: string; type: 'info' | 'success' } | null>(null);
 
-  // Conversation history
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'msg-init',
       sender: 'jarvis',
-      text: "Bonjour Monsieur Fabrice. Tous les systèmes de votre serveur dédié à domicile sont opérationnels. Vos emails, vos photos NAS, vos projets Android Studio et vos publications sont sous contrôle permanent. Comment puis-je vous assister ?",
+      text: "Bonjour Monsieur Fabrice. Tous les systèmes de votre serveur dédié à domicile sont opérationnels. Vos emails, vos photos NAS, vos projets Android Studio et vos publications sont synchronisés et prêts.",
       timestamp: 'Initialisé',
     },
   ]);
 
-  // Load live telemetry from dedicated server
   useEffect(() => {
-    // Initial path / URL check to restore or navigate to appropriate tab without 404
     if (typeof window !== 'undefined') {
       const path = window.location.pathname.toLowerCase();
       const search = window.location.search.toLowerCase();
@@ -111,22 +106,24 @@ export default function App() {
     );
   };
 
-  // Main voice & text dispatcher for JARVIS
   const handleProcessOrder = async (orderText: string) => {
-    if (!orderText.trim() || isThinking) return;
+    const trimmed = orderText.trim();
+    if (!trimmed || inFlightRequestRef.current || isThinking) return;
+
+    inFlightRequestRef.current = true;
+    setIsThinking(true);
 
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       sender: 'user',
-      text: orderText,
+      text: trimmed,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
     setMessages((prev) => [...prev, userMsg]);
-    setIsThinking(true);
 
     try {
-      const response = await askJarvisChat(orderText, messages, activeTab);
+      const response = await askJarvisChat(trimmed, messages, activeTab);
       const replyText = response.reply || "À vos ordres, Monsieur. Votre demande a été traitée.";
 
       const jarvisMsg: ChatMessage = {
@@ -137,8 +134,6 @@ export default function App() {
       };
 
       setMessages((prev) => [...prev, jarvisMsg]);
-
-      // Speak response using voice synthesis if not muted
       setIsSpeaking(true);
       jarvisVoice.speak(replyText, () => {
         setIsSpeaking(false);
@@ -148,8 +143,7 @@ export default function App() {
         showNotification(`Code JARVIS sauvegardé avec succès [commit: ${response.gitCommit}]`, 'success');
       }
 
-      // Contextual routing if requested by user
-      const lower = orderText.toLowerCase();
+      const lower = trimmed.toLowerCase();
       if (lower.includes('email') || lower.includes('mail') || lower.includes('courriel')) {
         setActiveTab('emails');
       } else if (lower.includes('photo') || lower.includes('doublon') || lower.includes('album')) {
@@ -166,7 +160,7 @@ export default function App() {
         setActiveTab('hologram');
       } else if (lower.includes('smartphone') || lower.includes('mobile') || lower.includes('téléphone')) {
         setIsMobileModalOpen(true);
-      } else if (lower.includes('voix') || lower.includes('humour') || lower.includes('sarcasme') || lower.includes('caractere') || lower.includes('caractère') || lower.includes('personnalité') || lower.includes('timbre')) {
+      } else if (lower.includes('voix') || lower.includes('humour') || lower.includes('sarcasme') || lower.includes('caractere') || lower.includes('caractère') || lower.includes('personnalité')) {
         setIsVoicePersonalityOpen(true);
       }
     } catch (err: any) {
@@ -179,6 +173,7 @@ export default function App() {
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
+      inFlightRequestRef.current = false;
       setIsThinking(false);
     }
   };
@@ -187,27 +182,27 @@ export default function App() {
     if (isListening) {
       jarvisVoice.stopListening();
       setIsListening(false);
-    } else {
-      setIsListening(true);
-      jarvisVoice.startListening(
-        (transcript) => {
-          setIsListening(false);
-          handleProcessOrder(transcript);
-        },
-        (err) => {
-          console.warn('Voice recognition error:', err);
-          setIsListening(false);
-          showNotification("Microphone indisponible ou permission non accordée.", 'info');
-        }
-      );
+      return;
     }
+
+    setIsListening(true);
+    jarvisVoice.startListening(
+      (transcript) => {
+        setIsListening(false);
+        void handleProcessOrder(transcript);
+      },
+      (err) => {
+        console.warn('Voice recognition error:', err);
+        setIsListening(false);
+        showNotification("Microphone indisponible ou permission non accordée.", 'info');
+      }
+    );
   };
 
   const unreadCount = emails.filter((e) => e.unread).length;
 
   return (
     <div className="min-h-screen bg-[#040711] text-slate-100 flex flex-col selection:bg-cyan-500 selection:text-slate-950">
-      {/* Top HUD Header */}
       <HeaderHUD
         activeTab={activeTab}
         onSelectTab={setActiveTab}
@@ -220,9 +215,8 @@ export default function App() {
         unreadEmailCount={unreadCount}
       />
 
-      {/* Floating Notification Toast */}
       {toast && (
-        <div className="fixed top-14 right-4 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/95 border border-cyan-500/40 text-xs font-hud text-white shadow-2xl shadow-cyan-500/20 animate-fade-in">
+        <div className="fixed top-14 right-4 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/95 border border-cyan-500/40 text-xs font-hud text-white shadow-2xl shadow-cyan-500/20">
           {toast.type === 'success' ? (
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           ) : (
@@ -232,9 +226,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
-        {/* Omnipresent Command Bar */}
         <CommandOmnibar
           onSendMessage={handleProcessOrder}
           isThinking={isThinking}
@@ -243,7 +235,6 @@ export default function App() {
           currentModule={activeTab}
         />
 
-        {/* Dynamic Module Content */}
         {activeTab === 'overview' && (
           <OverviewModule
             onNavigate={setActiveTab}
@@ -318,7 +309,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Smartphone Companion Simulator Modal */}
       <MobileViewModal
         isOpen={isMobileModalOpen}
         onClose={() => setIsMobileModalOpen(false)}
@@ -330,14 +320,12 @@ export default function App() {
         onNotify={showNotification}
       />
 
-      {/* Dedicated Home Server Setup & Configuration Modal */}
       <ServerSetupModal
         isOpen={isServerSetupOpen}
         onClose={() => setIsServerSetupOpen(false)}
         onNotify={showNotification}
       />
 
-      {/* Voice Synthesis & Personality Modal */}
       <VoicePersonalityModal
         isOpen={isVoicePersonalityOpen}
         onClose={() => setIsVoicePersonalityOpen(false)}
@@ -346,7 +334,6 @@ export default function App() {
         }}
       />
 
-      {/* Footer Status Line */}
       <footer className="border-t border-cyan-500/10 py-3 px-4 text-center text-xs font-mono text-slate-500 bg-slate-950/80">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>

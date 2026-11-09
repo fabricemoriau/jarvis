@@ -30,35 +30,39 @@ export const CommandOmnibar: React.FC<CommandOmnibarProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isThinking) return;
-    const msg = input.trim();
+    const value = input.trim();
+    if (!value || isThinking) return;
     setInput('');
-    await onSendMessage(msg);
+    await onSendMessage(value);
   };
 
   const toggleMic = () => {
+    if (isThinking) return;
+
     if (isListening) {
       jarvisVoice.stopListening();
       setIsListening(false);
-    } else {
-      setIsListening(true);
-      jarvisVoice.startListening(
-        (transcript) => {
-          setIsListening(false);
-          setInput(transcript);
-          onSendMessage(transcript);
-        },
-        (err) => {
-          console.warn('Voice recognition error:', err);
-          setIsListening(false);
-        }
-      );
+      return;
     }
+
+    setIsListening(true);
+    jarvisVoice.startListening(
+      (transcript) => {
+        setIsListening(false);
+        const clean = transcript.trim();
+        if (!clean) return;
+        setInput(clean);
+        void onSendMessage(clean);
+      },
+      (err) => {
+        console.warn('Voice recognition error:', err);
+        setIsListening(false);
+      }
+    );
   };
 
   return (
     <div className="w-full">
-      {/* Quick suggestions pills */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 no-scrollbar">
         <span className="text-[11px] font-hud text-cyan-400 whitespace-nowrap flex items-center gap-1 pl-1">
           <Sparkles className="w-3 h-3 text-cyan-400" />
@@ -67,16 +71,19 @@ export const CommandOmnibar: React.FC<CommandOmnibarProps> = ({
         {quickPrompts.map((qp, idx) => (
           <button
             key={idx}
-            onClick={() => onSendMessage(qp.text)}
+            onClick={() => {
+              if (isThinking) return;
+              setInput('');
+              void onSendMessage(qp.text);
+            }}
             disabled={isThinking}
-            className="px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-cyan-950/80 border border-cyan-500/25 hover:border-cyan-400 text-[11px] font-hud text-slate-300 hover:text-cyan-200 transition-all whitespace-nowrap active:scale-95 disabled:opacity-50"
+            className="px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-cyan-950/80 border border-cyan-500/25 hover:border-cyan-400 text-[11px] font-hud text-slate-300 hover:text-cyan-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {qp.label}
           </button>
         ))}
       </div>
 
-      {/* Main command input bar */}
       <form onSubmit={handleSubmit} className="relative flex items-center">
         <div className="relative flex-1 flex items-center">
           <input
@@ -86,10 +93,10 @@ export const CommandOmnibar: React.FC<CommandOmnibarProps> = ({
             disabled={isThinking}
             placeholder={
               isListening
-                ? "JARVIS vous écoute... Parlez naturellement..."
+                ? 'JARVIS vous écoute... Parlez naturellement...'
                 : isThinking
-                ? "JARVIS analyse votre demande et prépare l'action..."
-                : "Donnez un ordre à JARVIS (ex: « Rédige une réponse à Alexandre », « Compile l'APK Android », « Trie les photos »)..."
+                  ? 'JARVIS analyse votre demande et prépare l\'action...'
+                  : 'Donnez un ordre à JARVIS (ex: « Rédige une réponse à Alexandre », « Compile l\'APK Android », « Trie les photos »)...'
             }
             className={`w-full pl-4 pr-24 py-3 rounded-xl bg-slate-950/80 border text-sm text-white placeholder-slate-500 focus:outline-none transition-all shadow-inner ${
               isListening
@@ -99,7 +106,6 @@ export const CommandOmnibar: React.FC<CommandOmnibarProps> = ({
           />
 
           <div className="absolute right-2 flex items-center gap-1.5">
-            {/* Microphone button */}
             <button
               type="button"
               onClick={toggleMic}
@@ -113,11 +119,10 @@ export const CommandOmnibar: React.FC<CommandOmnibarProps> = ({
               {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </button>
 
-            {/* Submit button */}
             <button
               type="submit"
               disabled={!input.trim() || isThinking}
-              className="p-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-bold"
+              className="p-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               title="Transmettre l'ordre à JARVIS"
             >
               {isThinking ? (
