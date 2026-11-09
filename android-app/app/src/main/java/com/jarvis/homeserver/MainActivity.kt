@@ -1,6 +1,7 @@
 package com.jarvis.homeserver
 
 import android.os.Bundle
+import android.speech.tts.TextToSpeech
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.*
@@ -30,25 +31,47 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jarvis.homeserver.network.JarvisApiManager
 import kotlinx.coroutines.launch
+import java.util.Locale
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
+    private var tts: TextToSpeech? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        tts = TextToSpeech(this, this)
         setContent {
             MaterialTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = Color(0xFF030712)
                 ) {
-                    JarvisHudDashboard()
+                    JarvisHudDashboard(onSpeak = { speakOut(it) })
                 }
             }
         }
     }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            tts?.language = Locale.FRENCH
+            tts?.setPitch(0.95f)
+            tts?.setSpeechRate(1.05f)
+        }
+    }
+
+    private fun speakOut(text: String) {
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "JARVIS_TTS")
+    }
+
+    override fun onDestroy() {
+        tts?.stop()
+        tts?.shutdown()
+        super.onDestroy()
+    }
 }
 
 @Composable
-fun JarvisHudDashboard() {
+fun JarvisHudDashboard(onSpeak: (String) -> Unit) {
     val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableStateOf(0) }
     val tabTitles = listOf("COCKPIT", "MAILS", "PHOTOS", "SERVEUR")
@@ -60,9 +83,9 @@ fun JarvisHudDashboard() {
     var inputText by remember { mutableStateOf("") }
 
     val logs = remember { mutableStateListOf(
-        "[SYSTEME] Boot JARVIS Mobile Companion v3.0",
+        "[SYSTEME] Boot JARVIS Mobile Companion v3.1",
+        "[SYNTHÈSE VOCALE] Moteur de voix majordome activé.",
         "[ERGONOMIE] Cockpit multi-onglets & Télémétrie réactive.",
-        "[POUVOIRS] Contrôle total et exécution autonome activés.",
         "[SERVEUR] Démon Python 100.67.0.126 & 192.168.1.98 prêts."
     ) }
 
@@ -78,6 +101,7 @@ fun JarvisHudDashboard() {
             if (pingSuccess) {
                 connectionStatus = "Connecté & Synchronisé 24/7"
                 logs.add(0, "[OK] Liaison établie sur : $activeUrl")
+                onSpeak("Serveur JARVIS en ligne et synchronisé.")
             } else {
                 connectionStatus = "Alerte : Injoignable (Vérifiez VPN/Wi-Fi)"
                 logs.add(0, "[ERREUR] Impossible de contacter $activeUrl")
@@ -93,6 +117,7 @@ fun JarvisHudDashboard() {
                 val reply = JarvisApiManager.sendCommand(cmd)
                 isThinking = false
                 logs.add(0, "[JARVIS] $reply")
+                onSpeak(reply)
             }
         }
     }
@@ -122,16 +147,16 @@ fun JarvisHudDashboard() {
         ) {
             Column {
                 Text(
-                    text = "J.A.R.V.I.S. HUD v3.0",
+                    text = "J.A.R.V.I.S. HUD v3.1",
                     color = Color(0xFF00F2FE),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
                 )
                 Text(
-                    text = "MAJORDOME SOUVERAIN • XIAOMI 14T PRO",
+                    text = "MAJORDOME SOUVERAIN • SYNTHÈSE VOCALE • XIAOMI 14T PRO",
                     color = Color(0xFF64748B),
-                    fontSize = 9.sp,
+                    fontSize = 8.sp,
                     fontFamily = FontFamily.Monospace
                 )
             }
@@ -342,7 +367,7 @@ fun EmailsTabContent(onExecute: (String) -> Unit) {
 
         EmailCard(
             sender = "Google Play Console",
-            subject = "Rapport Jarvis Mobile Companion v2.5",
+            subject = "Rapport Jarvis Mobile Companion v3.1",
             snippet = "0 crash détecté, utilisation batterie < 1.2% par 24h.",
             priority = "INFO (Score 35%)",
             onReply = { onExecute("Jarvis, archive le rapport Google Play Console.") }
