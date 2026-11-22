@@ -123,7 +123,7 @@ fun JarvisHudDashboard(onSpeak: (String) -> Unit) {
                     logs.add(0, "[OK] Liaison rétablie sur : $activeUrl")
                 }
                 isConnected = true
-                connectionStatus = "Connecté & Synchronisé 24/7"
+                connectionStatus = "Connecté (Latence : ${JarvisApiManager.activeLatencyMs} ms)"
 
                 if (pendingOrders.isNotEmpty()) {
                     val listToExecute = pendingOrders.toList()

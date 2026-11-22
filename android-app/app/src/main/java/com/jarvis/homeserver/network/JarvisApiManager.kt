@@ -19,11 +19,20 @@ object JarvisApiManager {
     private const val DDNS_PUBLIC_URL = "https://fabrice-jarvis-home.duckdns.org:5000"
 
     private var cachedActiveUrl: String? = null
+    var activeLatencyMs: Long = 0L
+
+    init {
+        // Active la réutilisation instantanée des sockets TCP Keep-Alive
+        System.setProperty("http.keepAlive", "true")
+        System.setProperty("http.maxConnections", "10")
+    }
 
     suspend fun resolveActiveServerUrl(): String = withContext(Dispatchers.IO) {
         cachedActiveUrl?.let { url ->
-            if (pingServer("$url/api/server/status") || pingServer("$url/api/health")) {
-                Log.i("JarvisApiManager", "Using cached active endpoint: $url")
+            val (ok, latency) = pingServerWithLatency("$url/api/server/status")
+            if (ok) {
+                activeLatencyMs = latency
+                Log.i("JarvisApiManager", "Fast cache hit on endpoint: $url (${latency}ms)")
                 return@withContext url
             }
         }
@@ -38,33 +47,42 @@ object JarvisApiManager {
 
         val pingJobs = candidates.map { (baseUrl, checkUrl) ->
             async {
-                if (pingServer(checkUrl)) baseUrl else null
+                val (success, lat) = pingServerWithLatency(checkUrl)
+                if (success) Triple(baseUrl, checkUrl, lat) else null
             }
         }
 
-        val results = pingJobs.awaitAll()
-        val winner = results.firstOrNull { it != null } ?: ADB_USB_REVERSE_3000
+        val results = pingJobs.awaitAll().filterNotNull()
+        val winnerTriple = results.minByOrNull { it.third } ?: Triple(ADB_USB_REVERSE_3000, "", 0L)
+        val winner = winnerTriple.first
+        activeLatencyMs = winnerTriple.third
         cachedActiveUrl = winner
-        Log.i("JarvisApiManager", "Resolved winner active endpoint: $winner")
+        Log.i("JarvisApiManager", "Resolved fastest winner active endpoint: $winner (${activeLatencyMs}ms)")
         winner
     }
 
-    suspend fun pingServer(endpointUrl: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun pingServerWithLatency(endpointUrl: String): Pair<Boolean, Long> = withContext(Dispatchers.IO) {
+        val start = System.currentTimeMillis()
         return@withContext try {
             val connection = (URL(endpointUrl).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 3000
-                readTimeout = 3000
+                connectTimeout = 1500
+                readTimeout = 1500
                 requestMethod = "GET"
+                setRequestProperty("Connection", "Keep-Alive")
             }
             val responseCode = connection.responseCode
             connection.disconnect()
-            Log.i("JarvisApiManager", "Ping $endpointUrl -> SUCCESS $responseCode")
-            responseCode in 200..299
+            val latency = System.currentTimeMillis() - start
+            val success = responseCode in 200..299
+            Log.i("JarvisApiManager", "Ping $endpointUrl -> SUCCESS $responseCode (${latency}ms)")
+            Pair(success, latency)
         } catch (e: Exception) {
             Log.i("JarvisApiManager", "Ping $endpointUrl -> FAILED (${e.message})")
-            false
+            Pair(false, 0L)
         }
     }
+
+    suspend fun pingServer(endpointUrl: String): Boolean = pingServerWithLatency(endpointUrl).first
 
     suspend fun sendCommand(commandText: String): String = withContext(Dispatchers.IO) {
         val baseUrl = resolveActiveServerUrl()
@@ -73,10 +91,11 @@ object JarvisApiManager {
         return@withContext try {
             val url = URL(targetEndpoint)
             val conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 5000
-                readTimeout = 5000
+                connectTimeout = 4000
+                readTimeout = 4000
                 requestMethod = "POST"
                 setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Connection", "Keep-Alive")
                 doOutput = true
             }
 
