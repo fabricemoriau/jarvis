@@ -54,6 +54,40 @@ let currentPersonalityConfig: JarvisPersonalityConfig = {
   sarcasmLevel: 25,
 };
 
+interface MemoryItem {
+  id: string;
+  category: 'preference' | 'fact' | 'procedure' | 'system';
+  key: string;
+  value: string;
+  createdAt: string;
+}
+
+const MEMORY_FILE = path.join(__dirname, 'data', 'memory.json');
+
+function loadMemory(): MemoryItem[] {
+  try {
+    if (fs.existsSync(MEMORY_FILE)) {
+      return JSON.parse(fs.readFileSync(MEMORY_FILE, 'utf-8'));
+    }
+  } catch (e) {}
+  return [
+    { id: 'mem_1', category: 'preference', key: 'nom_utilisateur', value: 'Fabrice Moriau', createdAt: new Date().toISOString() },
+    { id: 'mem_2', category: 'system', key: 'serveur_debian', value: '100.67.0.126 (Tailscale) / 192.168.1.98 (LAN)', createdAt: new Date().toISOString() },
+    { id: 'mem_3', category: 'system', key: 'device_mobile', value: 'Xiaomi 14T Pro (2407FPN8EG)', createdAt: new Date().toISOString() },
+    { id: 'mem_4', category: 'system', key: 'stockage_nas', value: '/nas/photos/ (Vault ZFS)', createdAt: new Date().toISOString() }
+  ];
+}
+
+function saveMemory(memories: MemoryItem[]): void {
+  try {
+    const dir = path.dirname(MEMORY_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(MEMORY_FILE, JSON.stringify(memories, null, 2), 'utf-8');
+  } catch (e) {}
+}
+
+let activeMemories: MemoryItem[] = loadMemory();
+
 function getJarvisSystemInstruction(customConfig?: Partial<JarvisPersonalityConfig>): string {
   const config = { ...currentPersonalityConfig, ...customConfig };
   let toneGuidance = '';
@@ -461,7 +495,24 @@ app.post(['/api/jarvis/chat', '/api/chat'], async (req: Request, res: Response) 
     function getSmartAnswer(prompt: string, salutation: string): string {
       const q = prompt.toLowerCase().trim();
 
-      // Math
+      // Apprentissage / Mémorisation automatique
+      if (q.includes('retiens que') || q.includes('apprends que') || q.includes('mémorise que') || q.includes('souviens-toi que')) {
+        const factText = prompt.replace(/^(jarvis,?\s*)?(retiens que|apprends que|mémorise que|souviens-toi que)\s*/i, '').trim();
+        if (factText) {
+          const newItem: MemoryItem = {
+            id: `mem_${Date.now()}`,
+            category: 'fact',
+            key: `Apprentissage_${Date.now()}`,
+            value: factText,
+            createdAt: new Date().toISOString()
+          };
+          activeMemories.push(newItem);
+          saveMemory(activeMemories);
+          return `C'est bien noté, ${salutation}. J'ai mémorisé dans ma base de connaissances : « ${factText} ».`;
+        }
+      }
+
+      // Calculations
       const mathMatch = q.match(/(\d+)\s*([\+\-\*\/])\s*(\d+)/);
       if (mathMatch) {
         const num1 = parseFloat(mathMatch[1]);
@@ -511,10 +562,6 @@ app.post(['/api/jarvis/chat', '/api/chat'], async (req: Request, res: Response) 
       }
 
       return `À vos ordres, ${salutation}. Ordre « ${prompt} » exécuté par votre majordome JARVIS.`;
-    }
-      }
-
-      return `À vos ordres, ${salutation}. J'ai analysé et pris en compte votre demande : « ${prompt} ». L'ordre a été interprété et traité de manière autonome par votre majordome JARVIS.`;
     }
 
     const localReply = getSmartAnswer(message, activeConfig.userSalutation);

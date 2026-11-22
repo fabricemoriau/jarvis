@@ -1,0 +1,37 @@
+[
+  {
+    "id": "mem_1",
+    "category": "preference",
+    "key": "nom_utilisateur",
+    "value": "Fabrice Moriau",
+    "createdAt": "2026-11-22T18:34:43.614Z"
+  },
+  {
+    "id": "mem_2",
+    "category": "system",
+    "key": "serveur_debian",
+    "value": "100.67.0.126 (Tailscale) / 192.168.1.98 (LAN)",
+    "createdAt": "2026-11-22T18:34:43.616Z"
+  },
+  {
+    "id": "mem_3",
+    "category": "system",
+    "key": "device_mobile",
+    "value": "Xiaomi 14T Pro (2407FPN8EG)",
+    "createdAt": "2026-11-22T18:34:43.616Z"
+  },
+  {
+    "id": "mem_4",
+    "category": "system",
+    "key": "stockage_nas",
+    "value": "/nas/photos/ (Vault ZFS)",
+    "createdAt": "2026-11-22T18:34:43.616Z"
+  },
+  {
+    "id": "mem_1795372490050",
+    "category": "fact",
+    "key": "Apprentissage_1795372490050",
+    "value": "mon caf� pr�f�r� est l espresso fort",
+    "createdAt": "2026-11-22T18:34:50.050Z"
+  }
+]
