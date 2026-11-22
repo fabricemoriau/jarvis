@@ -531,6 +531,16 @@ app.post(['/api/jarvis/chat', '/api/chat'], async (req: Request, res: Response) 
         return `À vos ordres, ${salutation}. Le ciel est bleu en raison de la diffusion Rayleigh de la lumière solaire par l'atmosphère.`;
       }
 
+      // Routine Matin / Briefing Exécutif
+      if (q.includes('briefing') || q.includes('matin') || q.includes('routine matin')) {
+        return `Bonjour ${salutation}. Briefing matinal : Serveur Debian 100.67.0.126 nominal (CPU 12%, RAM 34%). 1 mail urgent d'Alexandre Laurent en attente de réponse. Vos photos Xiaomi sont synchronisées sur le NAS ZFS. Tous les systèmes sont prêts.`;
+      }
+
+      // Routine Soir / Clôture
+      if (q.includes('soir') || q.includes('clôture') || q.includes('routine soir')) {
+        return `Bonsoir ${salutation}. Clôture de la journée : Code source poussé sur GitHub (main), 0 erreur détectée. Sauvegarde du coffre ZFS à jour. Bon repos.`;
+      }
+
       // Greetings / Identity
       if (q.includes('bonjour') || q.includes('salut') || q.includes('cc') || q.includes('coucou') || q.includes('qui es-tu') || q.includes('qui es tu') || q.includes('présente')) {
         return `Bonjour ${salutation} ! Je suis J.A.R.V.I.S., votre majordome virtuel. Vos systèmes serveur et Xiaomi 14T Pro sont opérationnels. Que puis-je faire pour vous ?`;
